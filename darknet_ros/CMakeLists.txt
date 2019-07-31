@@ -120,6 +120,7 @@ if (CUDA_FOUND)
     ${DARKNET_PATH}/src/gru_layer.c               ${DARKNET_PATH}/src/utils.c
     ${DARKNET_PATH}/src/upsample_layer.c          ${DARKNET_PATH}/src/logistic_layer.c
     ${DARKNET_PATH}/src/l2norm_layer.c            ${DARKNET_PATH}/src/yolo_layer.c
+    ${DARKNET_PATH}/src/iseg_layer.c              ${DARKNET_PATH}/src/image_opencv.cpp
 
     ${DARKNET_PATH}/examples/art.c                ${DARKNET_PATH}/examples/lsd.c
     ${DARKNET_PATH}/examples/attention.c          ${DARKNET_PATH}/examples/nightmare.c
@@ -129,7 +130,7 @@ if (CUDA_FOUND)
     ${DARKNET_PATH}/examples/coco.c               ${DARKNET_PATH}/examples/super.c
     ${DARKNET_PATH}/examples/darknet.c            ${DARKNET_PATH}/examples/tag.c
     ${DARKNET_PATH}/examples/detector.c           ${DARKNET_PATH}/examples/yolo.c
-    ${DARKNET_PATH}/examples/go.c
+    ${DARKNET_PATH}/examples/go.c                 ${DARKNET_PATH}/examples/instance-segmenter.c
 
     ${DARKNET_PATH}/src/activation_kernels.cu     ${DARKNET_PATH}/src/crop_layer_kernels.cu
     ${DARKNET_PATH}/src/avgpool_layer_kernels.cu  ${DARKNET_PATH}/src/deconvolutional_kernels.cu
@@ -184,6 +185,7 @@ else()
     ${DARKNET_PATH}/src/gru_layer.c               ${DARKNET_PATH}/src/utils.c
     ${DARKNET_PATH}/src/upsample_layer.c          ${DARKNET_PATH}/src/logistic_layer.c
     ${DARKNET_PATH}/src/l2norm_layer.c            ${DARKNET_PATH}/src/yolo_layer.c
+    ${DARKNET_PATH}/src/iseg_layer.c              ${DARKNET_PATH}/src/image_opencv.cpp
 
     ${DARKNET_PATH}/examples/art.c                ${DARKNET_PATH}/examples/lsd.c
     ${DARKNET_PATH}/examples/attention.c          ${DARKNET_PATH}/examples/nightmare.c
@@ -193,7 +195,7 @@ else()
     ${DARKNET_PATH}/examples/coco.c               ${DARKNET_PATH}/examples/super.c
     ${DARKNET_PATH}/examples/darknet.c            ${DARKNET_PATH}/examples/tag.c
     ${DARKNET_PATH}/examples/detector.c           ${DARKNET_PATH}/examples/yolo.c
-    ${DARKNET_PATH}/examples/go.c
+    ${DARKNET_PATH}/examples/go.c                 ${DARKNET_PATH}/examples/instance-segmenter.c
   )
 
   target_link_libraries(${PROJECT_NAME}_lib
@@ -236,28 +238,31 @@ install(
   FILES_MATCHING PATTERN "*.h"
 )
 
-# Download yolov2-tiny.weights
-set(PATH "${CMAKE_CURRENT_SOURCE_DIR}/yolo_network_config/weights")
-set(FILE "${PATH}/yolov2-tiny.weights")
-message(STATUS "Checking and downloading yolov2-tiny.weights if needed ...")
-if (NOT EXISTS "${FILE}")
-  message(STATUS "... file does not exist. Downloading now ...")
-  execute_process(COMMAND wget http://pjreddie.com/media/files/yolov2-tiny.weights -P ${PATH})
-endif()
+option(DOWNLOAD_WEIGHTS "Download or not" 0)
+if(DOWNLOAD_WEIGHTS)
+  # Download yolov2-tiny.weights
+  set(PATH "${CMAKE_CURRENT_SOURCE_DIR}/yolo_network_config/weights")
+  set(FILE "${PATH}/yolov2-tiny.weights")
+  message(STATUS "Checking and downloading yolov2-tiny.weights if needed ...")
+  if (NOT EXISTS "${FILE}")
+    message(STATUS "... file does not exist. Downloading now ...")
+    execute_process(COMMAND wget http://pjreddie.com/media/files/yolov2-tiny.weights -P ${PATH})
+  endif()
 
-# Download yolov3.weights
-set(FILE "${PATH}/yolov3.weights")
-message(STATUS "Checking and downloading yolov3.weights if needed ...")
-if (NOT EXISTS "${FILE}")
-  message(STATUS "... file does not exist. Downloading now ...")
-  execute_process(COMMAND wget http://pjreddie.com/media/files/yolov3.weights -P ${PATH})
-endif()
+  # Download yolov3.weights
+  set(FILE "${PATH}/yolov3.weights")
+  message(STATUS "Checking and downloading yolov3.weights if needed ...")
+  if (NOT EXISTS "${FILE}")
+    message(STATUS "... file does not exist. Downloading now ...")
+    execute_process(COMMAND wget http://pjreddie.com/media/files/yolov3.weights -P ${PATH})
+  endif()
+endif (DOWNLOAD_WEIGHTS)
 
 #############
 ## Testing ##
 #############
 
-if(CATKIN_ENABLE_TESTING)
+if (DOWNLOAD_WEIGHTS)
   # Download yolov2.weights
   set(PATH "${CMAKE_CURRENT_SOURCE_DIR}/yolo_network_config/weights")
   set(FILE "${PATH}/yolov2.weights")
@@ -278,4 +283,4 @@ if(CATKIN_ENABLE_TESTING)
   target_link_libraries(${PROJECT_NAME}_object_detection-test
     ${catkin_LIBRARIES}
   )
-endif()
+endif (DOWNLOAD_WEIGHTS)
