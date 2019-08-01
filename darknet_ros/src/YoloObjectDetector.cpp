@@ -349,6 +349,11 @@ void *YoloObjectDetector::detectInThread()
   image display = buff_[(buffIndex_+2) % 3];
   draw_detections(display, dets, nboxes, demoThresh_, demoNames_, demoAlphabet_, demoClasses_);
 
+  // Delete memory of previous ipl_
+  cvReleaseImage(&ipl_);
+  rgbgr_image(display);
+  ipl_ = image_to_ipl(display);
+
   // extract the bounding boxes and send them to ROS
   int i, j;
   int count = 0;
@@ -423,7 +428,10 @@ void *YoloObjectDetector::fetchInThread()
 
 void *YoloObjectDetector::displayInThread(void *ptr)
 {
-  int c = show_image_cv(buff_[(buffIndex_ + 1)%3], "YOLO V3", waitKeyDelay_);
+  cv::Mat cvImage = cv::cvarrToMat(ipl_);
+  // int c = show_image_cv(buff_[(buffIndex_ + 1)%3], "YOLO V3", waitKeyDelay_);
+  cv::imshow("YOLO V3", cvImage);
+  int c = cv::waitKey(waitKeyDelay_);
   if (c != -1) c = c%256;
   if (c == 27) {
       demoDone_ = 1;
