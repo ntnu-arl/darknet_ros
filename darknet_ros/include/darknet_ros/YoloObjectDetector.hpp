@@ -177,7 +177,8 @@ class YoloObjectDetector
   image buff_[3];
   image buffLetter_[3];
   int buffId_[3];
-  int buffIndex_ = 0;
+  int buffRdInd_ = 0;
+  int buffWrtInd_ = 0;
   IplImage * ipl_;
   float fps_ = 0;
   float demoThresh_ = 0;
@@ -194,6 +195,7 @@ class YoloObjectDetector
   float *avg_;
   int demoTotal_ = 0;
   double demoTime_;
+  bool initDone_ = false;
 
   RosBox_ *roiBoxes_;
   bool viewImage_;
@@ -247,6 +249,8 @@ class YoloObjectDetector
   bool isNodeRunning(void);
 
   void *publishInThread();
+
+  void writeImageToBuffer();
 };
 
 } /* namespace darknet_ros*/

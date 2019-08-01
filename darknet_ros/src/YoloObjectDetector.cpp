@@ -197,6 +197,7 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg)
       boost::unique_lock<boost::shared_mutex> lockImageCallback(mutexImageCallback_);
       imageHeader_ = msg->header;
       camImageCopy_ = cam_image->image.clone();
+      writeImageToBuffer();
     }
     {
       boost::unique_lock<boost::shared_mutex> lockImageStatus(mutexImageStatus_);
@@ -330,7 +331,7 @@ void *YoloObjectDetector::detectInThread()
   float nms = .4;
 
   layer l = net_->layers[net_->n - 1];
-  float *X = buffLetter_[(buffIndex_ + 2) % 3].data;
+  float *X = buffLetter_[buffRdInd_].data;
   float *prediction = network_predict(net_, X);
 
   rememberNetwork(net_);
@@ -346,7 +347,7 @@ void *YoloObjectDetector::detectInThread()
     printf("\nFPS:%.1f\n",fps_);
     printf("Objects:\n\n");
   }
-  image display = buff_[(buffIndex_+2) % 3];
+  image display = buff_[buffRdInd_];
   draw_detections(display, dets, nboxes, demoThresh_, demoNames_, demoAlphabet_, demoClasses_);
 
   // Delete memory of previous ipl_
@@ -409,6 +410,25 @@ void *YoloObjectDetector::detectInThread()
   return 0;
 }
 
+void YoloObjectDetector::writeImageToBuffer() {
+  if (!initDone_) return;
+  IplImage* ROS_img = new IplImage(camImageCopy_);
+  // Free space before assigning new value to avoid memory leak.
+  free_image(buff_[buffWrtInd_]);
+  buff_[buffWrtInd_] = ipl_to_image(ROS_img); // this create new memory.
+  headerBuff_[buffWrtInd_] = imageHeader_;
+
+  // buffId_[buffRdInd_] = actionId_; // unsure about this
+  rgbgr_image(buff_[buffWrtInd_]);
+  letterbox_image_into(buff_[buffWrtInd_], net_->w, net_->h, buffLetter_[buffWrtInd_]);
+
+  // Increase the index or not.
+  int buff_new_wrt_ind = (buffWrtInd_ + 1)%3;
+  if (buff_new_wrt_ind != buffRdInd_) {
+    buffWrtInd_ = buff_new_wrt_ind;
+  }
+}
+
 void *YoloObjectDetector::fetchInThread()
 {
   {
@@ -416,20 +436,21 @@ void *YoloObjectDetector::fetchInThread()
     IplImageWithHeader_ imageAndHeader = getIplImageWithHeader();
     IplImage* ROS_img = imageAndHeader.image;
     //  free space before assigning new value to avoid memory leak.
-    delete buff_[buffIndex_].data;
-    buff_[buffIndex_] = ipl_to_image(ROS_img); // this create new memory.
-    headerBuff_[buffIndex_] = imageAndHeader.header;
-    buffId_[buffIndex_] = actionId_;
+    // delete buff_[buffRdInd_].data;
+    free_image(buff_[buffRdInd_]);
+    buff_[buffRdInd_] = ipl_to_image(ROS_img); // this create new memory.
+    headerBuff_[buffRdInd_] = imageAndHeader.header;
+    buffId_[buffRdInd_] = actionId_;
   }
-  rgbgr_image(buff_[buffIndex_]);
-  letterbox_image_into(buff_[buffIndex_], net_->w, net_->h, buffLetter_[buffIndex_]);
+  rgbgr_image(buff_[buffRdInd_]);
+  letterbox_image_into(buff_[buffRdInd_], net_->w, net_->h, buffLetter_[buffRdInd_]);
   return 0;
 }
 
 void *YoloObjectDetector::displayInThread(void *ptr)
 {
   cv::Mat cvImage = cv::cvarrToMat(ipl_);
-  // int c = show_image_cv(buff_[(buffIndex_ + 1)%3], "YOLO V3", waitKeyDelay_);
+  // int c = show_image_cv(buff_[(buffRdInd_ + 1)%3], "YOLO V3", waitKeyDelay_);
   cv::imshow("YOLO V3", cvImage);
   int c = cv::waitKey(waitKeyDelay_);
   if (c != -1) c = c%256;
@@ -540,26 +561,30 @@ void YoloObjectDetector::yolo()
   }
 
   demoTime_ = what_time_is_it_now();
-
+  initDone_ = true;
   while (!demoDone_) {
-    buffIndex_ = (buffIndex_ + 1) % 3;
-    fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
-    detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
-    if (!demoPrefix_) {
-      fps_ = 1./(what_time_is_it_now() - demoTime_);
-      demoTime_ = what_time_is_it_now();
-      if (viewImage_) {
-        displayInThread(0);
+    // ROS_INFO_THROTTLE("While loop", 5);
+    if (buffRdInd_ != buffWrtInd_) {
+      // fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
+      detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+      if (!demoPrefix_) {
+        fps_ = 1./(what_time_is_it_now() - demoTime_);
+        demoTime_ = what_time_is_it_now();
+        if (viewImage_) {
+          displayInThread(0);
+        }
+        publishInThread();
+      } else {
+        char name[256];
+        sprintf(name, "%s_%08d", demoPrefix_, count);
+        save_image(buff_[buffRdInd_], name);
       }
-      publishInThread();
-    } else {
-      char name[256];
-      sprintf(name, "%s_%08d", demoPrefix_, count);
-      save_image(buff_[(buffIndex_ + 1) % 3], name);
+      // fetch_thread.join();
+      detect_thread.join();
+      ++count;
+      buffRdInd_ = (buffRdInd_ + 1) % 3;
     }
-    fetch_thread.join();
-    detect_thread.join();
-    ++count;
+
     if (!isNodeRunning()) {
       demoDone_ = true;
     }
@@ -632,7 +657,7 @@ void *YoloObjectDetector::publishInThread()
     }
     boundingBoxesResults_.header.stamp = imageHeader_.stamp; //ros::Time::now();
     boundingBoxesResults_.header.frame_id = "detection";
-    boundingBoxesResults_.image_header = headerBuff_[(buffIndex_ + 1) % 3];
+    boundingBoxesResults_.image_header = headerBuff_[buffRdInd_];
     boundingBoxesPublisher_.publish(boundingBoxesResults_);
   } else {
     std_msgs::Int8 msg;
