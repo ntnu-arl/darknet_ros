@@ -410,7 +410,9 @@ void *YoloObjectDetector::fetchInThread()
     boost::shared_lock<boost::shared_mutex> lock(mutexImageCallback_);
     IplImageWithHeader_ imageAndHeader = getIplImageWithHeader();
     IplImage* ROS_img = imageAndHeader.image;
-    buff_[buffIndex_] = ipl_to_image(ROS_img);
+    //  free space before assigning new value to avoid memory leak.
+    delete buff_[buffIndex_].data;
+    buff_[buffIndex_] = ipl_to_image(ROS_img); // this create new memory.
     headerBuff_[buffIndex_] = imageAndHeader.header;
     buffId_[buffIndex_] = actionId_;
   }

@@ -60,7 +60,6 @@ extern "C" {
 extern "C" void ipl_into_image(IplImage* src, image im);
 extern "C" image ipl_to_image(IplImage* src);
 extern "C" int show_image_cv(image im, const char* name, int ms);
-extern "C" image ipl_to_image(IplImage* src);
 
 namespace darknet_ros {
 
