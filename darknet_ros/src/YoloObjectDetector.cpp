@@ -128,18 +128,26 @@ void YoloObjectDetector::init()
 
   // Initialize publisher and subscriber.
   std::string cameraTopicName;
+  std::string cameraTopicName2;
   int cameraQueueSize;
   std::string objectDetectorTopicName;
   int objectDetectorQueueSize;
   bool objectDetectorLatch;
   std::string boundingBoxesTopicName;
+  std::string boundingBoxesTopicName2;
   int boundingBoxesQueueSize;
   bool boundingBoxesLatch;
   std::string detectionImageTopicName;
+  std::string detectionImageTopicName2;
   int detectionImageQueueSize;
   bool detectionImageLatch;
+  first_time_ = true;
 
   nodeHandle_.param("subscribers/camera_reading/topic", cameraTopicName,
+                    std::string("/camera/image_raw"));
+  nodeHandle_.param("subscribers/camera_reading/topic_frame_id", topic_frame_id_,
+                    std::string("blackfly_front"));
+  nodeHandle_.param("subscribers/camera_reading/topic2", cameraTopicName2,
                     std::string("/camera/image_raw"));
   nodeHandle_.param("subscribers/camera_reading/queue_size", cameraQueueSize, 1);
   nodeHandle_.param("publishers/object_detector/topic", objectDetectorTopicName,
@@ -148,23 +156,38 @@ void YoloObjectDetector::init()
   nodeHandle_.param("publishers/object_detector/latch", objectDetectorLatch, false);
   nodeHandle_.param("publishers/bounding_boxes/topic", boundingBoxesTopicName,
                     std::string("bounding_boxes"));
+  nodeHandle_.param("publishers/bounding_boxes/topic2", boundingBoxesTopicName2,
+                    std::string("bounding_boxes"));
   nodeHandle_.param("publishers/bounding_boxes/queue_size", boundingBoxesQueueSize, 1);
   nodeHandle_.param("publishers/bounding_boxes/latch", boundingBoxesLatch, false);
   nodeHandle_.param("publishers/detection_image/topic", detectionImageTopicName,
+                    std::string("detection_image"));
+  nodeHandle_.param("publishers/detection_image/topic2", detectionImageTopicName2,
                     std::string("detection_image"));
   nodeHandle_.param("publishers/detection_image/queue_size", detectionImageQueueSize, 1);
   nodeHandle_.param("publishers/detection_image/latch", detectionImageLatch, true);
 
   imageSubscriber_ = imageTransport_.subscribe(cameraTopicName, cameraQueueSize,
-                                               &YoloObjectDetector::cameraCallback, this);
+                                                &YoloObjectDetector::cameraCallback, this);
+  imageSubscriber2_ = imageTransport_.subscribe(cameraTopicName2, cameraQueueSize,
+                                                &YoloObjectDetector::cameraCallback, this);
+  
   objectPublisher_ = nodeHandle_.advertise<std_msgs::Int8>(objectDetectorTopicName,
                                                            objectDetectorQueueSize,
                                                            objectDetectorLatch);
   boundingBoxesPublisher_ = nodeHandle_.advertise<darknet_ros_msgs::BoundingBoxes>(
       boundingBoxesTopicName, boundingBoxesQueueSize, boundingBoxesLatch);
+  boundingBoxesPublisher2_ = nodeHandle_.advertise<darknet_ros_msgs::BoundingBoxes>(
+      boundingBoxesTopicName2, boundingBoxesQueueSize, boundingBoxesLatch);
   detectionImagePublisher_ = nodeHandle_.advertise<sensor_msgs::Image>(detectionImageTopicName,
                                                                        detectionImageQueueSize,
                                                                        detectionImageLatch);
+  detectionImagePublisher2_ = nodeHandle_.advertise<sensor_msgs::Image>(detectionImageTopicName2,
+                                                                       detectionImageQueueSize,
+                                                                       detectionImageLatch);
+
+  //Diagnostics: 
+  ROS_INFO_STREAM("cameraTopicName, cameraTopicName2, topic_frame_id: "<<  cameraTopicName<< " "<<  cameraTopicName2 << " " << topic_frame_id_);
 
   // Action servers.
   std::string checkForObjectsActionName;
@@ -257,18 +280,31 @@ bool YoloObjectDetector::isCheckingForObjects() const
       && !checkForObjectsActionServer_->isPreemptRequested());
 }
 
-bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage)
+bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage, const std::string frameID)
 {
-  if (detectionImagePublisher_.getNumSubscribers() < 1)
-    return false;
-  cv_bridge::CvImage cvImage;
-  cvImage.header.stamp = imageHeader_.stamp; //ros::Time::now();
-  cvImage.header.frame_id = "detection_image";
-  cvImage.encoding = sensor_msgs::image_encodings::BGR8;
-  cvImage.image = detectionImage;
-  detectionImagePublisher_.publish(*cvImage.toImageMsg());
-  ROS_DEBUG("Detection image has been published.");
-  return true;
+  if (topic_frame_id_.compare(frameID) == 0){
+    if (detectionImagePublisher_.getNumSubscribers() < 1)
+      return false;
+    cv_bridge::CvImage cvImage;
+    cvImage.header.stamp = imageHeader_.stamp; //ros::Time::now();
+    cvImage.header.frame_id = frameID;
+    cvImage.encoding = sensor_msgs::image_encodings::BGR8;
+    cvImage.image = detectionImage;
+    detectionImagePublisher_.publish(*cvImage.toImageMsg());
+    ROS_DEBUG("Detection image has been published.");
+    return true;
+  }else{
+    if (detectionImagePublisher2_.getNumSubscribers() < 1)
+      return false;
+    cv_bridge::CvImage cvImage;
+    cvImage.header.stamp = imageHeader_.stamp; //ros::Time::now();
+    cvImage.header.frame_id = frameID;
+    cvImage.encoding = sensor_msgs::image_encodings::BGR8;
+    cvImage.image = detectionImage;
+    detectionImagePublisher2_.publish(*cvImage.toImageMsg());
+    ROS_DEBUG("Detection image has been published.");
+    return true;
+  }
 }
 
 // double YoloObjectDetector::getWallTime()
@@ -423,7 +459,7 @@ void YoloObjectDetector::writeImageToBuffer() {
   letterbox_image_into(buff_[buffWrtInd_], net_->w, net_->h, buffLetter_[buffWrtInd_]);
 
   // Increase the index or not.
-  int buff_new_wrt_ind = (buffWrtInd_ + 1)%3;
+  int buff_new_wrt_ind = (buffWrtInd_ + 1)%10;
   if (buff_new_wrt_ind != buffRdInd_) {
     buffWrtInd_ = buff_new_wrt_ind;
   }
@@ -541,11 +577,32 @@ void YoloObjectDetector::yolo()
   }
   buff_[1] = copy_image(buff_[0]);
   buff_[2] = copy_image(buff_[0]);
+  buff_[3] = copy_image(buff_[0]);
+  buff_[4] = copy_image(buff_[0]);
+  buff_[5] = copy_image(buff_[0]);
+  buff_[6] = copy_image(buff_[0]);
+  buff_[7] = copy_image(buff_[0]);
+  buff_[8] = copy_image(buff_[0]);
+  buff_[9] = copy_image(buff_[0]);
   headerBuff_[1] = headerBuff_[0];
   headerBuff_[2] = headerBuff_[0];
+  headerBuff_[3] = headerBuff_[0];
+  headerBuff_[4] = headerBuff_[0];
+  headerBuff_[5] = headerBuff_[0];
+  headerBuff_[6] = headerBuff_[0];
+  headerBuff_[7] = headerBuff_[0];
+  headerBuff_[8] = headerBuff_[0];
+  headerBuff_[9] = headerBuff_[0];
   buffLetter_[0] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[1] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[2] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[3] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[4] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[5] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[6] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[7] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[8] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[9] = letterbox_image(buff_[0], net_->w, net_->h);
   ipl_ = cvCreateImage(cvSize(buff_[0].w, buff_[0].h), IPL_DEPTH_8U, buff_[0].c);
 
   int count = 0;
@@ -582,7 +639,7 @@ void YoloObjectDetector::yolo()
       // fetch_thread.join();
       detect_thread.join();
       ++count;
-      buffRdInd_ = (buffRdInd_ + 1) % 3;
+      buffRdInd_ = (buffRdInd_ + 1) % 10;
     }
 
     if (!isNodeRunning()) {
@@ -617,7 +674,7 @@ void *YoloObjectDetector::publishInThread()
 {
   // Publish image.
   cv::Mat cvImage = cv::cvarrToMat(ipl_);
-  if (!publishDetectionImage(cv::Mat(cvImage))) {
+  if (!publishDetectionImage(cv::Mat(cvImage), headerBuff_[buffRdInd_].frame_id)) {
     ROS_DEBUG("Detection image has not been broadcasted.");
   }
 
@@ -660,7 +717,12 @@ void *YoloObjectDetector::publishInThread()
     boundingBoxesResults_.header.stamp = imageHeader_.stamp; //ros::Time::now();
     boundingBoxesResults_.header.frame_id = "detection";
     boundingBoxesResults_.image_header = headerBuff_[buffRdInd_];
-    boundingBoxesPublisher_.publish(boundingBoxesResults_);
+    if (topic_frame_id_.compare(headerBuff_[buffRdInd_].frame_id) == 0){
+      boundingBoxesPublisher_.publish(boundingBoxesResults_);
+    }else{
+      boundingBoxesPublisher2_.publish(boundingBoxesResults_);
+    }
+
   } else {
     std_msgs::Int8 msg;
     msg.data = 0;

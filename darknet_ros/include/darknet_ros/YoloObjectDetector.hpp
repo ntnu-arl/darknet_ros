@@ -128,7 +128,7 @@ class YoloObjectDetector
    * Publishes the detection image.
    * @return true if successful.
    */
-  bool publishDetectionImage(const cv::Mat& detectionImage);
+  bool publishDetectionImage(const cv::Mat& detectionImage, const std::string frameID);
 
   //! Typedefs.
   typedef actionlib::SimpleActionServer<darknet_ros_msgs::CheckForObjectsAction> CheckForObjectsActionServer;
@@ -147,10 +147,16 @@ class YoloObjectDetector
   //! Advertise and subscribe to image topics.
   image_transport::ImageTransport imageTransport_;
 
+  //! Extra string to save frame id of the first topic
+  std::string topic_frame_id_;
+  bool first_time_;
+
   //! ROS subscriber and publisher.
   image_transport::Subscriber imageSubscriber_;
+  image_transport::Subscriber imageSubscriber2_;
   ros::Publisher objectPublisher_;
   ros::Publisher boundingBoxesPublisher_;
+  ros::Publisher boundingBoxesPublisher2_;
 
   //! Detected objects.
   std::vector<std::vector<RosBox_> > rosBoxes_;
@@ -163,6 +169,7 @@ class YoloObjectDetector
 
   //! Publisher of the bounding box image.
   ros::Publisher detectionImagePublisher_;
+  ros::Publisher detectionImagePublisher2_;
 
   // Yolo running on thread.
   std::thread yoloThread_;
@@ -173,10 +180,10 @@ class YoloObjectDetector
   int demoClasses_;
 
   network *net_;
-  std_msgs::Header headerBuff_[3];
-  image buff_[3];
-  image buffLetter_[3];
-  int buffId_[3];
+  std_msgs::Header headerBuff_[10];
+  image buff_[10];
+  image buffLetter_[10];
+  int buffId_[10];
   int buffRdInd_ = 0;
   int buffWrtInd_ = 0;
   IplImage * ipl_;
