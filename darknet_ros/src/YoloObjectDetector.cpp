@@ -263,7 +263,7 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage)
     return false;
   cv_bridge::CvImage cvImage;
   cvImage.header.stamp = imageHeader_.stamp; //ros::Time::now();
-  cvImage.header.frame_id = "detection_image";
+  cvImage.header.frame_id = imageHeader_.frame_id;
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher_.publish(*cvImage.toImageMsg());
@@ -658,7 +658,7 @@ void *YoloObjectDetector::publishInThread()
       }
     }
     boundingBoxesResults_.header.stamp = imageHeader_.stamp; //ros::Time::now();
-    boundingBoxesResults_.header.frame_id = "detection";
+    boundingBoxesResults_.header.frame_id = imageHeader_.frame_id;
     boundingBoxesResults_.image_header = headerBuff_[buffRdInd_];
     boundingBoxesPublisher_.publish(boundingBoxesResults_);
   } else {
