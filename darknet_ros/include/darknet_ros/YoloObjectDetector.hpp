@@ -12,6 +12,7 @@
 #include <math.h>
 #include <string>
 #include <vector>
+#include <queue>         
 #include <iostream>
 #include <pthread.h>
 #include <thread>
@@ -59,7 +60,8 @@ extern "C" {
 
 extern "C" void ipl_into_image(IplImage* src, image im);
 extern "C" image ipl_to_image(IplImage* src);
-extern "C" void show_image_cv(image p, const char *name, IplImage *disp);
+extern "C" int show_image_cv(image im, const char* name, int ms);
+extern "C" IplImage *image_to_ipl(image im);
 
 namespace darknet_ros {
 
@@ -87,7 +89,7 @@ class YoloObjectDetector
   /*!
    * Destructor.
    */
-  ~YoloObjectDetector();
+  ~YoloObjectDetector(); 
 
  private:
   /*!
@@ -105,7 +107,9 @@ class YoloObjectDetector
    * Callback of camera.
    * @param[in] msg image pointer.
    */
-  void cameraCallback(const sensor_msgs::ImageConstPtr& msg);
+  void cameraCallback1(const sensor_msgs::ImageConstPtr& msg);
+  void cameraCallback2(const sensor_msgs::ImageConstPtr& msg);
+  void cameraCallback3(const sensor_msgs::ImageConstPtr& msg);
 
   /*!
    * Check for objects action goal callback.
@@ -127,7 +131,7 @@ class YoloObjectDetector
    * Publishes the detection image.
    * @return true if successful.
    */
-  bool publishDetectionImage(const cv::Mat& detectionImage);
+  bool publishDetectionImage(const cv::Mat& detectionImage, const std_msgs::Header& header);
 
   //! Typedefs.
   typedef actionlib::SimpleActionServer<darknet_ros_msgs::CheckForObjectsAction> CheckForObjectsActionServer;
@@ -147,9 +151,13 @@ class YoloObjectDetector
   image_transport::ImageTransport imageTransport_;
 
   //! ROS subscriber and publisher.
-  image_transport::Subscriber imageSubscriber_;
-  ros::Publisher objectPublisher_;
-  ros::Publisher boundingBoxesPublisher_;
+  image_transport::Subscriber imageSubscriber_1;
+  image_transport::Subscriber imageSubscriber_2;
+  image_transport::Subscriber imageSubscriber_3;
+  // ros::Publisher objectPublisher_;
+  ros::Publisher boundingBoxesPublisher_1;
+  ros::Publisher boundingBoxesPublisher_2;
+  ros::Publisher boundingBoxesPublisher_3;
 
   //! Detected objects.
   std::vector<std::vector<RosBox_> > rosBoxes_;
@@ -161,7 +169,14 @@ class YoloObjectDetector
   int frameHeight_;
 
   //! Publisher of the bounding box image.
-  ros::Publisher detectionImagePublisher_;
+  ros::Publisher detectionImagePublisher_1;
+  ros::Publisher detectionImagePublisher_2;
+  ros::Publisher detectionImagePublisher_3;
+
+  //! Camera topic names
+  std::string cameraTopicName1;
+  std::string cameraTopicName2;
+  std::string cameraTopicName3;
 
   // Yolo running on thread.
   std::thread yoloThread_;
@@ -172,16 +187,30 @@ class YoloObjectDetector
   int demoClasses_;
 
   network *net_;
-  std_msgs::Header headerBuff_[3];
-  image buff_[3];
-  image buffLetter_[3];
-  int buffId_[3];
-  int buffIndex_ = 0;
+
+  struct QueueType 
+  {
+    image img;
+    image letter;
+    std_msgs::Header header;
+    std::string imgTopic;
+  };
+
+  std::queue<QueueType> Queue;
+
+  std::string CurrImgTopic;
+  // The following 3 variables are used control incoming frame
+  // rate for each camera:
+  int timeoflastpushCam1, timeoflastpushCam2, timeoflastpushCam3;
+
+  double FPSCam1, FPSCam2, FPSCam3;
+
   IplImage * ipl_;
   float fps_ = 0;
   float demoThresh_ = 0;
   float demoHier_ = .5;
   int running_ = 0;
+  const int MAXQUEUESIZE = 10;
 
   int demoDelay_ = 0;
   int demoFrame_ = 3;
@@ -193,6 +222,7 @@ class YoloObjectDetector
   float *avg_;
   int demoTotal_ = 0;
   double demoTime_;
+  bool initDone_ = false;
 
   RosBox_ *roiBoxes_;
   bool viewImage_;
@@ -224,14 +254,6 @@ class YoloObjectDetector
 
   void *detectInThread();
 
-  void *fetchInThread();
-
-  void *displayInThread(void *ptr);
-
-  void *displayLoop(void *ptr);
-
-  void *detectLoop(void *ptr);
-
   void setupNetwork(char *cfgfile, char *weightfile, char *datafile, float thresh,
                     char **names, int classes,
                     int delay, char *prefix, int avg_frames, float hier, int w, int h,
@@ -245,7 +267,7 @@ class YoloObjectDetector
 
   bool isNodeRunning(void);
 
-  void *publishInThread();
+  void writeImageToQueue(std::string topic);
 };
 
 } /* namespace darknet_ros*/
