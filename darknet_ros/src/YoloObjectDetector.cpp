@@ -387,7 +387,6 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage, co
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher.publish(*cvImage.toImageMsg());
-  ROS_INFO("Detection image has been published.");
   return true;
 }
 
@@ -448,7 +447,6 @@ detection *YoloObjectDetector::avgPredictions(network *net, int *nboxes)
 void *YoloObjectDetector::detectInThread()
 {
   if(Queue.empty()) return 0;
-  ROS_INFO("[DetectInThread]");
 
     running_ = 1;
     float nms = .4;
