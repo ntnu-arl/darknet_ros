@@ -229,7 +229,6 @@ void YoloObjectDetector::init()
 //************************************/
 void YoloObjectDetector::cameraCallback1(const sensor_msgs::ImageConstPtr& msg)
 {
-  ROS_INFO("[YoloObjectDetector] Image received.");
 
   cv_bridge::CvImagePtr cam_image;
 
@@ -258,7 +257,6 @@ void YoloObjectDetector::cameraCallback1(const sensor_msgs::ImageConstPtr& msg)
 }
 void YoloObjectDetector::cameraCallback2(const sensor_msgs::ImageConstPtr& msg)
 {
-  ROS_INFO("[YoloObjectDetector] Image received.");
 
   cv_bridge::CvImagePtr cam_image;
 
