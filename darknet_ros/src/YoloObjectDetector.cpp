@@ -539,7 +539,7 @@ void *YoloObjectDetector::detectInThread()
     CurrImgTopic = cameraTopicName3;
     std::cout << std::endl << CurrImgTopic << std::endl;
   }
-  std_msgs::Header currHeader
+  std_msgs::Header currHeader;
   {
     boost::unique_lock<boost::shared_mutex> queue_lock(mutexQueue_);
     delete Queue.front().img.data;
