@@ -131,7 +131,7 @@ void YoloObjectDetector::init()
   int cameraQueueSize;
   std::string objectDetectorTopicName;
   int objectDetectorQueueSize;
-  bool objectDetectorLatch; 
+  bool objectDetectorLatch;
   std::string boundingBoxesTopicName1;
   std::string boundingBoxesTopicName2;
   std::string boundingBoxesTopicName3;
@@ -151,7 +151,7 @@ void YoloObjectDetector::init()
                     std::string("/camera/image_raw"));
   nodeHandle_.param("subscribers/camera_reading/topic3", cameraTopicName3,
                     std::string("/camera/image_raw"));
-  
+
   nodeHandle_.param("subscribers/camera_reading/FPSCam1", FPSCam1, 1.0);
   nodeHandle_.param("subscribers/camera_reading/FPSCam2", FPSCam2, 1.0);
   nodeHandle_.param("subscribers/camera_reading/FPSCam3", FPSCam3, 1.0);
@@ -190,7 +190,7 @@ void YoloObjectDetector::init()
   imageSubscriber_2 = imageTransport_.subscribe(cameraTopicName2, cameraQueueSize,
                                                &YoloObjectDetector::cameraCallback2, this);
   imageSubscriber_3 = imageTransport_.subscribe(cameraTopicName3, cameraQueueSize,
-                                               &YoloObjectDetector::cameraCallback3, this);     
+                                               &YoloObjectDetector::cameraCallback3, this);
 
   // objectPublisher_ = nodeHandle_.advertise<std_msgs::Int8>(objectDetectorTopicName,
   //                                                          objectDetectorQueueSize,
@@ -208,7 +208,7 @@ void YoloObjectDetector::init()
                                                                        detectionImageLatch);
   detectionImagePublisher_2 = nodeHandle_.advertise<sensor_msgs::Image>(detectionImageTopicName2,
                                                                        detectionImageQueueSize,
-                                                                       detectionImageLatch);                                                                     
+                                                                       detectionImageLatch);
   detectionImagePublisher_3 = nodeHandle_.advertise<sensor_msgs::Image>(detectionImageTopicName3,
                                                                        detectionImageQueueSize,
                                                                        detectionImageLatch);
@@ -287,8 +287,6 @@ void YoloObjectDetector::cameraCallback2(const sensor_msgs::ImageConstPtr& msg)
 }
 void YoloObjectDetector::cameraCallback3(const sensor_msgs::ImageConstPtr& msg)
 {
-  ROS_INFO("[YoloObjectDetector] Image received.");
-
   cv_bridge::CvImagePtr cam_image;
 
   try {
@@ -386,7 +384,7 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage, co
     return false;
 
   cv_bridge::CvImage cvImage;
-  cvImage.header.stamp = header.stamp; 
+  cvImage.header.stamp = header.stamp;
   cvImage.header.frame_id = "detection_image";
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
@@ -540,7 +538,7 @@ void *YoloObjectDetector::detectInThread()
   {
     CurrImgTopic = cameraTopicName2;
   }
-  else 
+  else
   {
     CurrImgTopic = cameraTopicName3;
     std::cout << std::endl << CurrImgTopic << std::endl;
@@ -610,9 +608,9 @@ void *YoloObjectDetector::detectInThread()
     {
       boundingBoxesPublisher_3.publish(boundingBoxesResults_);
     }
-      
-  } 
-  else 
+
+  }
+  else
   {
     // std_msgs::Int8 msg;
     // msg.data = 0;
@@ -629,24 +627,24 @@ void *YoloObjectDetector::detectInThread()
   for (int i = 0; i < numClasses_; i++) {
     rosBoxes_[i].clear();
     rosBoxCounter_[i] = 0;
-  } 
+  }
   //********************************/
   /*******END PUBLISH SECTION*******/
   //********************************/
 
-    
+
   return 0;
 }
 
 void YoloObjectDetector::writeImageToQueue(std::string topic) {
-  // if (!initDone_) 
+  // if (!initDone_)
   // {
   //   printf("Waiting for init to finish\n");
   //   return;
   // }
   if (topic == cameraTopicName1)
   {
-    if ((what_time_is_it_now() - timeoflastpushCam1) < 1/FPSCam1) 
+    if ((what_time_is_it_now() - timeoflastpushCam1) < 1/FPSCam1)
     {
       return;
     }
@@ -654,7 +652,7 @@ void YoloObjectDetector::writeImageToQueue(std::string topic) {
   }
   else if (topic == cameraTopicName2)
   {
-    if ((what_time_is_it_now() - timeoflastpushCam2) < 1/FPSCam2) 
+    if ((what_time_is_it_now() - timeoflastpushCam2) < 1/FPSCam2)
     {
       return;
     }
@@ -662,27 +660,27 @@ void YoloObjectDetector::writeImageToQueue(std::string topic) {
   }
   else
   {
-    if ((what_time_is_it_now() - timeoflastpushCam3) < 1/FPSCam3) 
+    if ((what_time_is_it_now() - timeoflastpushCam3) < 1/FPSCam3)
     {
       return;
     }
     timeoflastpushCam3 = what_time_is_it_now();
   }
-  
+
   IplImage* ROS_img = new IplImage(camImageCopy_);
 
   while(Queue.size() > MAXQUEUESIZE - 1)
   {
     delete Queue.front().img.data;
     // delete Queue.front().letter.data;
-    Queue.pop(); 
+    Queue.pop();
 
   }
   QueueType QE;
   QE.img = ipl_to_image(ROS_img); // this create new memory.
   QE.header = imageHeader_;
   QE.imgTopic = topic;
-  
+
 
   rgbgr_image(QE.img);
   QE.letter = letterbox_image(QE.img, net_->w, net_->h);
@@ -744,7 +742,7 @@ void YoloObjectDetector::yolo()
   {
     printf("Queue is empty\n");
   }
-  
+
   ipl_ = cvCreateImage(cvSize(Queue.front().img.w, Queue.front().img.h), IPL_DEPTH_8U, Queue.front().img.c);
   int count = 0;
 
