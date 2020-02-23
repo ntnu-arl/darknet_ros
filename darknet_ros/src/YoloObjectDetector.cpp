@@ -383,7 +383,7 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage, co
 
   cv_bridge::CvImage cvImage;
   cvImage.header.stamp = header.stamp;
-  cvImage.header.frame_id = "detection_image";
+  cvImage.header.frame_id = header.frame_id;
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher.publish(*cvImage.toImageMsg());
