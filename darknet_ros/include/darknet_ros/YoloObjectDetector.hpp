@@ -244,6 +244,8 @@ class YoloObjectDetector
   int actionId_;
   boost::shared_mutex mutexActionStatus_;
 
+  boost::shared_mutex mutexQueue_;
+
   // double getWallTime();
 
   int sizeNetwork(network *net);

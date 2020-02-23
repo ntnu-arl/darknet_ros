@@ -539,10 +539,13 @@ void *YoloObjectDetector::detectInThread()
     CurrImgTopic = cameraTopicName3;
     std::cout << std::endl << CurrImgTopic << std::endl;
   }
-  delete Queue.front().img.data;
-  delete Queue.front().letter.data;
-  std_msgs::Header currHeader = Queue.front().header; // To use for publishing.
-  Queue.pop();
+  {
+    boost::unique_lock<boost::shared_mutex> queue_lock(mutexQueue_);
+    delete Queue.front().img.data;
+    delete Queue.front().letter.data;
+    std_msgs::Header currHeader = Queue.front().header; // To use for publishing.
+    Queue.pop();
+  }
 
   //********************************/
   /*********PUBLISH SECTION*********/
@@ -665,25 +668,28 @@ void YoloObjectDetector::writeImageToQueue(std::string topic) {
 
   IplImage* ROS_img = new IplImage(camImageCopy_);
 
-  while(Queue.size() > MAXQUEUESIZE - 1)
   {
-    delete Queue.front().img.data;
-    // delete Queue.front().letter.data;
-    Queue.pop();
+    boost::unique_lock<boost::shared_mutex> queue_lock(mutexQueue_);
+    while(Queue.size() > MAXQUEUESIZE - 1)
+    {
+      delete Queue.front().img.data;
+      // delete Queue.front().letter.data;
+      Queue.pop();
 
+    }
+    QueueType QE;
+    QE.img = ipl_to_image(ROS_img); // this create new memory.
+    QE.header = imageHeader_;
+    QE.imgTopic = topic;
+
+
+    rgbgr_image(QE.img);
+    QE.letter = letterbox_image(QE.img, net_->w, net_->h);
+    letterbox_image_into(QE.img, net_->w, net_->h, QE.letter);
+
+    Queue.push(QE);
+    std::cout << "Queue size: " << Queue.size() << "\n";
   }
-  QueueType QE;
-  QE.img = ipl_to_image(ROS_img); // this create new memory.
-  QE.header = imageHeader_;
-  QE.imgTopic = topic;
-
-
-  rgbgr_image(QE.img);
-  QE.letter = letterbox_image(QE.img, net_->w, net_->h);
-  letterbox_image_into(QE.img, net_->w, net_->h, QE.letter);
-
-  Queue.push(QE);
-  std::cout << "Queue size: " << Queue.size() << "\n";
 }
 
 void YoloObjectDetector::setupNetwork(char *cfgfile, char *weightfile, char *datafile, float thresh,
