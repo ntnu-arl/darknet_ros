@@ -565,7 +565,8 @@ void YoloObjectDetector::yolo()
     // ROS_INFO_THROTTLE("While loop", 5);
     if (buffRdInd_ != buffWrtInd_) {
       // fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
-      detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+      // detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+      detectInThread();
       if (!demoPrefix_) {
         fps_ = 1./(what_time_is_it_now() - demoTime_);
         demoTime_ = what_time_is_it_now();
@@ -579,7 +580,7 @@ void YoloObjectDetector::yolo()
         save_image(buff_[buffRdInd_], name);
       }
       // fetch_thread.join();
-      detect_thread.join();
+      // detect_thread.join();
       ++count;
       buffRdInd_ = (buffRdInd_ + 1) % 3;
     }
