@@ -440,7 +440,7 @@ detection *YoloObjectDetector::avgPredictions(network *net, int *nboxes)
       count += l.outputs;
     }
   }
-  boost::shared_mutex<boost::shared_mutex> queue_lock(mutexQueue_);
+  boost::shared_lock<boost::shared_mutex> queue_lock(mutexQueue_);
   detection *dets = get_network_boxes(net, Queue.front().img.w, Queue.front().img.h, demoThresh_, demoHier_, 0, 1, nboxes);
   return dets;
 }
