@@ -262,8 +262,7 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage)
   if (detectionImagePublisher_.getNumSubscribers() < 1)
     return false;
   cv_bridge::CvImage cvImage;
-  cvImage.header.stamp = imageHeader_.stamp; //ros::Time::now();
-  cvImage.header.frame_id = imageHeader_.frame_id;
+  cvImage.header = headerBuff_[buffRdInd_];
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher_.publish(*cvImage.toImageMsg());
@@ -566,7 +565,8 @@ void YoloObjectDetector::yolo()
     // ROS_INFO_THROTTLE("While loop", 5);
     if (buffRdInd_ != buffWrtInd_) {
       // fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
-      detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+      // detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+      detectInThread();
       if (!demoPrefix_) {
         fps_ = 1./(what_time_is_it_now() - demoTime_);
         demoTime_ = what_time_is_it_now();
@@ -580,7 +580,7 @@ void YoloObjectDetector::yolo()
         save_image(buff_[buffRdInd_], name);
       }
       // fetch_thread.join();
-      detect_thread.join();
+      // detect_thread.join();
       ++count;
       buffRdInd_ = (buffRdInd_ + 1) % 3;
     }
@@ -657,8 +657,7 @@ void *YoloObjectDetector::publishInThread()
         }
       }
     }
-    boundingBoxesResults_.header.stamp = imageHeader_.stamp; //ros::Time::now();
-    boundingBoxesResults_.header.frame_id = imageHeader_.frame_id;
+    boundingBoxesResults_.header = headerBuff_[buffRdInd_];
     boundingBoxesResults_.image_header = headerBuff_[buffRdInd_];
     boundingBoxesPublisher_.publish(boundingBoxesResults_);
   } else {
