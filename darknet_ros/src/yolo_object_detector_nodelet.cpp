@@ -17,7 +17,10 @@ class DarknetRosNodelet : public nodelet::Nodelet {
 
   public:
     DarknetRosNodelet(){}
-    ~DarknetRosNodelet(){}
+    ~DarknetRosNodelet(){
+
+      if(darknet_ros_) delete darknet_ros_;
+    }
 
   private:
     virtual void onInit() {
