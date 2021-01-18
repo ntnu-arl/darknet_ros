@@ -263,7 +263,7 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage)
     return false;
   cv_bridge::CvImage cvImage;
   cvImage.header = headerBuff_[buffRdInd_];
-  cvImage.encoding = sensor_msgs::image_encodings::RGB8;
+  cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher_.publish(*cvImage.toImageMsg());
   ROS_DEBUG("Detection image has been published.");
@@ -349,9 +349,6 @@ void *YoloObjectDetector::detectInThread()
   image display = buff_[buffRdInd_];
   draw_detections(display, dets, nboxes, demoThresh_, demoNames_, demoAlphabet_, demoClasses_);
 
-  // Delete memory of previous mat_
-  mat_.release();
-  rgbgr_image(display);
   mat_ = image_to_mat(display);
 
   // extract the bounding boxes and send them to ROS
