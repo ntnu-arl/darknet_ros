@@ -263,7 +263,7 @@ bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage)
     return false;
   cv_bridge::CvImage cvImage;
   cvImage.header = headerBuff_[buffRdInd_];
-  cvImage.encoding = sensor_msgs::image_encodings::BGR8;
+  cvImage.encoding = sensor_msgs::image_encodings::RGB8;
   cvImage.image = detectionImage;
   detectionImagePublisher_.publish(*cvImage.toImageMsg());
   ROS_DEBUG("Detection image has been published.");
@@ -411,14 +411,12 @@ void *YoloObjectDetector::detectInThread()
 
 void YoloObjectDetector::writeImageToBuffer() {
   if (!initDone_) return;
-  cv::Mat ROS_img(camImageCopy_);
   // Free space before assigning new value to avoid memory leak.
   free_image(buff_[buffWrtInd_]);
-  buff_[buffWrtInd_] = mat_to_image(ROS_img); // this create new memory.
+  buff_[buffWrtInd_] = mat_to_image(camImageCopy_); // this create new memory.
   headerBuff_[buffWrtInd_] = imageHeader_;
 
   // buffId_[buffRdInd_] = actionId_; // unsure about this
-  rgbgr_image(buff_[buffWrtInd_]);
   letterbox_image_into(buff_[buffWrtInd_], net_->w, net_->h, buffLetter_[buffWrtInd_]);
 
   // Increase the index or not.
@@ -433,15 +431,13 @@ void *YoloObjectDetector::fetchInThread()
   {
     boost::shared_lock<boost::shared_mutex> lock(mutexImageCallback_);
     MatImageWithHeader_ imageAndHeader = getMatImageWithHeader();
-    cv::Mat ROS_img(imageAndHeader.image);
     //  free space before assigning new value to avoid memory leak.
     // delete buff_[buffRdInd_].data;
     free_image(buff_[buffRdInd_]);
-    buff_[buffRdInd_] = mat_to_image(ROS_img); // this create new memory.
+    buff_[buffRdInd_] = mat_to_image(imageAndHeader.image); // this create new memory.
     headerBuff_[buffRdInd_] = imageAndHeader.header;
     buffId_[buffRdInd_] = actionId_;
   }
-  rgbgr_image(buff_[buffRdInd_]);
   letterbox_image_into(buff_[buffRdInd_], net_->w, net_->h, buffLetter_[buffRdInd_]);
   return 0;
 }
@@ -533,8 +529,7 @@ void YoloObjectDetector::yolo()
   {
     boost::shared_lock<boost::shared_mutex> lock(mutexImageCallback_);
     MatImageWithHeader_ imageAndHeader = getMatImageWithHeader();
-    cv::Mat ROS_img(imageAndHeader.image);
-    buff_[0] = mat_to_image(ROS_img);
+    buff_[0] = mat_to_image(imageAndHeader.image);
     headerBuff_[0] = imageAndHeader.header;
   }
   buff_[1] = copy_image(buff_[0]);
@@ -544,7 +539,7 @@ void YoloObjectDetector::yolo()
   buffLetter_[0] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[1] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[2] = letterbox_image(buff_[0], net_->w, net_->h);
-  mat_ = cv::Mat(cv::Size(buff_[0].w, buff_[0].h), CV_8UC1, buff_[0].c);
+  mat_ = cv::Mat(cv::Size(buff_[0].w, buff_[0].h), CV_MAKETYPE(CV_8U, buff_[0].c));
 
   int count = 0;
 
@@ -595,9 +590,8 @@ void YoloObjectDetector::yolo()
 
 MatImageWithHeader_ YoloObjectDetector::getMatImageWithHeader()
 {
-  cv::Mat ROS_img(camImageCopy_);
-  MatImageWithHeader_ header = {.image = ROS_img, .header = imageHeader_};
-  return header;
+  MatImageWithHeader_ ImageWithHeader = {.image = camImageCopy_, .header = imageHeader_};
+  return ImageWithHeader;
 }
 
 bool YoloObjectDetector::getImageStatus(void)

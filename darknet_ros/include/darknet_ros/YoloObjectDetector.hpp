@@ -57,7 +57,6 @@ extern "C" {
 #include <sys/time.h>
 }
 
-extern "C" void mat_into_image(cv::Mat src, image im);
 extern "C" image mat_to_image(cv::Mat src);
 extern "C" int show_image_cv(image im, const char* name, int ms);
 extern "C" cv::Mat image_to_mat(image im);
