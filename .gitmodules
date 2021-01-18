@@ -1,3 +1,4 @@
 [submodule "darknet"]
 	path = darknet
-	url = https://github.com/unr-arl/darknet
+	url = git@github.com:ntnu-arl/darknet.git
+	branch = dev/cerb
