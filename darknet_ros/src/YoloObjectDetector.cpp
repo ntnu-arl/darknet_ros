@@ -349,10 +349,10 @@ void *YoloObjectDetector::detectInThread()
   image display = buff_[buffRdInd_];
   draw_detections(display, dets, nboxes, demoThresh_, demoNames_, demoAlphabet_, demoClasses_);
 
-  // Delete memory of previous ipl_
-  cvReleaseImage(&ipl_);
+  // Delete memory of previous mat_
+  mat_.release();
   rgbgr_image(display);
-  ipl_ = image_to_ipl(display);
+  mat_ = image_to_mat(display);
 
   // extract the bounding boxes and send them to ROS
   int i, j;
@@ -411,10 +411,10 @@ void *YoloObjectDetector::detectInThread()
 
 void YoloObjectDetector::writeImageToBuffer() {
   if (!initDone_) return;
-  IplImage* ROS_img = new IplImage(camImageCopy_);
+  cv::Mat ROS_img(camImageCopy_);
   // Free space before assigning new value to avoid memory leak.
   free_image(buff_[buffWrtInd_]);
-  buff_[buffWrtInd_] = ipl_to_image(ROS_img); // this create new memory.
+  buff_[buffWrtInd_] = mat_to_image(ROS_img); // this create new memory.
   headerBuff_[buffWrtInd_] = imageHeader_;
 
   // buffId_[buffRdInd_] = actionId_; // unsure about this
@@ -432,12 +432,12 @@ void *YoloObjectDetector::fetchInThread()
 {
   {
     boost::shared_lock<boost::shared_mutex> lock(mutexImageCallback_);
-    IplImageWithHeader_ imageAndHeader = getIplImageWithHeader();
-    IplImage* ROS_img = imageAndHeader.image;
+    MatImageWithHeader_ imageAndHeader = getMatImageWithHeader();
+    cv::Mat ROS_img(imageAndHeader.image);
     //  free space before assigning new value to avoid memory leak.
     // delete buff_[buffRdInd_].data;
     free_image(buff_[buffRdInd_]);
-    buff_[buffRdInd_] = ipl_to_image(ROS_img); // this create new memory.
+    buff_[buffRdInd_] = mat_to_image(ROS_img); // this create new memory.
     headerBuff_[buffRdInd_] = imageAndHeader.header;
     buffId_[buffRdInd_] = actionId_;
   }
@@ -448,9 +448,8 @@ void *YoloObjectDetector::fetchInThread()
 
 void *YoloObjectDetector::displayInThread(void *ptr)
 {
-  cv::Mat cvImage = cv::cvarrToMat(ipl_);
   // int c = show_image_cv(buff_[(buffRdInd_ + 1)%3], "YOLO V3", waitKeyDelay_);
-  cv::imshow("YOLO V3", cvImage);
+  cv::imshow("YOLO V3", mat_);
   int c = cv::waitKey(waitKeyDelay_);
   if (c != -1) c = c%256;
   if (c == 27) {
@@ -533,9 +532,9 @@ void YoloObjectDetector::yolo()
 
   {
     boost::shared_lock<boost::shared_mutex> lock(mutexImageCallback_);
-    IplImageWithHeader_ imageAndHeader = getIplImageWithHeader();
-    IplImage* ROS_img = imageAndHeader.image;
-    buff_[0] = ipl_to_image(ROS_img);
+    MatImageWithHeader_ imageAndHeader = getMatImageWithHeader();
+    cv::Mat ROS_img(imageAndHeader.image);
+    buff_[0] = mat_to_image(ROS_img);
     headerBuff_[0] = imageAndHeader.header;
   }
   buff_[1] = copy_image(buff_[0]);
@@ -545,17 +544,17 @@ void YoloObjectDetector::yolo()
   buffLetter_[0] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[1] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[2] = letterbox_image(buff_[0], net_->w, net_->h);
-  ipl_ = cvCreateImage(cvSize(buff_[0].w, buff_[0].h), IPL_DEPTH_8U, buff_[0].c);
+  mat_ = cv::Mat(cv::Size(buff_[0].w, buff_[0].h), CV_8UC1, buff_[0].c);
 
   int count = 0;
 
   if (!demoPrefix_ && viewImage_) {
-    cvNamedWindow("YOLO V3", CV_WINDOW_NORMAL);
+    cv::namedWindow("YOLO V3", cv::WINDOW_NORMAL);
     if (fullScreen_) {
-      cvSetWindowProperty("YOLO V3", CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+      cv::setWindowProperty("YOLO V3", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
     } else {
-      cvMoveWindow("YOLO V3", 0, 0);
-      cvResizeWindow("YOLO V3", 640, 480);
+      cv::moveWindow("YOLO V3", 0, 0);
+      cv::resizeWindow("YOLO V3", 640, 480);
     }
   }
 
@@ -594,10 +593,10 @@ void YoloObjectDetector::yolo()
 
 }
 
-IplImageWithHeader_ YoloObjectDetector::getIplImageWithHeader()
+MatImageWithHeader_ YoloObjectDetector::getMatImageWithHeader()
 {
-  IplImage* ROS_img = new IplImage(camImageCopy_);
-  IplImageWithHeader_ header = {.image = ROS_img, .header = imageHeader_};
+  cv::Mat ROS_img(camImageCopy_);
+  MatImageWithHeader_ header = {.image = ROS_img, .header = imageHeader_};
   return header;
 }
 
@@ -616,8 +615,7 @@ bool YoloObjectDetector::isNodeRunning(void)
 void *YoloObjectDetector::publishInThread()
 {
   // Publish image.
-  cv::Mat cvImage = cv::cvarrToMat(ipl_);
-  if (!publishDetectionImage(cv::Mat(cvImage))) {
+  if (!publishDetectionImage(mat_)) {
     ROS_DEBUG("Detection image has not been broadcasted.");
   }
 
