@@ -57,10 +57,9 @@ extern "C" {
 #include <sys/time.h>
 }
 
-extern "C" void ipl_into_image(IplImage* src, image im);
-extern "C" image ipl_to_image(IplImage* src);
+extern "C" image mat_to_image(cv::Mat src);
 extern "C" int show_image_cv(image im, const char* name, int ms);
-extern "C" IplImage *image_to_ipl(image im);
+extern "C" cv::Mat image_to_mat(image im);
 
 namespace darknet_ros {
 
@@ -73,9 +72,9 @@ typedef struct
 
 typedef struct
 {
-  IplImage* image;
+  cv::Mat image;
   std_msgs::Header header;
-} IplImageWithHeader_;
+} MatImageWithHeader_;
 
 class YoloObjectDetector
 {
@@ -179,7 +178,7 @@ class YoloObjectDetector
   int buffId_[3];
   int buffRdInd_ = 0;
   int buffWrtInd_ = 0;
-  IplImage * ipl_;
+  cv::Mat mat_;
   float fps_ = 0;
   float demoThresh_ = 0;
   float demoHier_ = .5;
@@ -242,7 +241,7 @@ class YoloObjectDetector
 
   void yolo();
 
-  IplImageWithHeader_ getIplImageWithHeader();
+  MatImageWithHeader_ getMatImageWithHeader();
 
   bool getImageStatus(void);
 
