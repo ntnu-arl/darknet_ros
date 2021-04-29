@@ -6,13 +6,14 @@
  *   Institute: ETH Zurich, Robotic Systems Lab
  */
 
-#include <darknet_ros/YoloObjectDetector.hpp>
+#include <darknet_ros/YoloObjectDetectorTrt.hpp>
 #include <ros/ros.h>
 
 int main(int argc, char** argv) {
   ros::init(argc, argv, "darknet_ros");
   ros::NodeHandle nodeHandle("~");
-  darknet_ros::YoloObjectDetector yoloObjectDetector(nodeHandle);
+  //darknet_ros::YoloObjectDetector yoloObjectDetector(nodeHandle);
+  darknet_ros::YoloObjectDetectorTrt yoloObjectDetector(nodeHandle);
 
   ros::spin();
   return 0;
