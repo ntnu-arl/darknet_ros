@@ -21,7 +21,7 @@ std::string darknetFilePath_ = DARKNET_FILE_PATH;
 namespace darknet_ros {
 
 char *cfg;
-char *weights;
+char *engine;
 char *data;
 char **detectionNames;
 
@@ -88,26 +88,25 @@ void YoloObjectDetectorTrt::init()
   ROS_INFO("[YoloObjectDetectorTrt] init().");
 
   // Initialize deep network of darknet.
-  std::string weightsPath;
   std::string configPath;
   std::string dataPath;
+  std::string enginePath;
+  std::string engineModel;
   std::string configModel;
-  std::string weightsModel;
 
   // Threshold of object detection.
-  float thresh;
-  nodeHandle_.param("yolo_model/threshold/value", thresh, (float) 0.3);
+  nodeHandle_.param("tensorrt_model/threshold/value", yolo_threshold_, (float) 0.3);
 
-  // Path to weights file.
-  nodeHandle_.param("yolo_model/weight_file/name", weightsModel,
-                    std::string("yolov2-tiny.weights"));
-  nodeHandle_.param("weights_path", weightsPath, std::string("/default"));
-  weightsPath += "/" + weightsModel;
-  weights = new char[weightsPath.length() + 1];
-  strcpy(weights, weightsPath.c_str());
+  // Path to TensorRT engine file
+  nodeHandle_.param("tensorrt_model/engine_file/name", engineModel,
+                      std::string("yolo_subt.trt"));
+    nodeHandle_.param("engine_path", enginePath, std::string("/default"));
+    enginePath += "/" + engineModel;
+    engine = new char[enginePath.length() + 1];
+    strcpy(engine, enginePath.c_str());
 
   // Path to config file.
-  nodeHandle_.param("yolo_model/config_file/name", configModel, std::string("yolov2-tiny.cfg"));
+  nodeHandle_.param("tensorrt_model/config_file/name", configModel, std::string("yolo_subt.cfg"));
   nodeHandle_.param("config_path", configPath, std::string("/default"));
   configPath += "/" + configModel;
   cfg = new char[configPath.length() + 1];
@@ -126,9 +125,10 @@ void YoloObjectDetectorTrt::init()
     strcpy(detectionNames[i], classLabels_[i].c_str());
   }
 
-  // Load network.
-  setupNetwork(cfg, weights, data, thresh, detectionNames, numClasses_,
-                0, 0, 1, 0.5, 0, 0, 0, 0);
+  // Get YOLO resolution
+  nodeHandle_.param("tensorrt_model/yolo_resolution/value", yolo_res, (int) 608);
+
+  // Load network
   yoloThread_ = std::thread(&YoloObjectDetectorTrt::yolo, this);
 
   // Initialize publisher and subscriber.
@@ -182,6 +182,65 @@ void YoloObjectDetectorTrt::init()
   checkForObjectsActionServer_->registerPreemptCallback(
       boost::bind(&YoloObjectDetectorTrt::checkForObjectsActionPreemptCB, this));
   checkForObjectsActionServer_->start();
+
+  //start TRT stuff
+   loadEngine(enginePath,engine_,context_);
+   ROS_INFO_STREAM("detectionJustYolo::loaded TRT model");
+   // buffers for input and output data
+   buffers_.resize(engine_->getNbBindings());
+   for (size_t i = 0; i < engine_->getNbBindings(); ++i)
+   {
+       auto binding_size = getSizeByDim(engine_->getBindingDimensions(i)) * batch_size_ * sizeof(float);
+       cudaMalloc(&buffers_[i], binding_size);
+
+       if (engine_->bindingIsInput(i))
+       {
+           input_dims_.emplace_back(engine_->getBindingDimensions(i));
+       }
+       else
+       {
+           output_dims_.emplace_back(engine_->getBindingDimensions(i));
+       }
+   }
+   if (input_dims_.empty() || output_dims_.empty())
+   {
+       ROS_ERROR_STREAM("detectionJustYolo::Expect at least one input and one output for network\n");
+   }
+
+  yolo_masks_.push_back(std::vector<int>());
+     yolo_masks_.push_back(std::vector<int>());
+     yolo_masks_.push_back(std::vector<int>());
+     yolo_masks_[0].push_back(6);
+     yolo_masks_[0].push_back(7);
+     yolo_masks_[0].push_back(8);
+     yolo_masks_[1].push_back(3);
+     yolo_masks_[1].push_back(4);
+     yolo_masks_[1].push_back(5);
+     yolo_masks_[2].push_back(0);
+     yolo_masks_[2].push_back(1);
+     yolo_masks_[2].push_back(2);
+
+     yolo_anchors_.push_back(std::vector<float>());
+     yolo_anchors_[0].push_back(116.0);
+     yolo_anchors_[0].push_back(90.0);
+     yolo_anchors_[0].push_back(156.0);
+     yolo_anchors_[0].push_back(198.0);
+     yolo_anchors_[0].push_back(373.0);
+     yolo_anchors_[0].push_back(326.0);
+     yolo_anchors_.push_back(std::vector<float>());
+     yolo_anchors_[1].push_back(30.0);
+     yolo_anchors_[1].push_back(61.0);
+     yolo_anchors_[1].push_back(62.0);
+     yolo_anchors_[1].push_back(45.0);
+     yolo_anchors_[1].push_back(59.0);
+     yolo_anchors_[1].push_back(119.0);
+     yolo_anchors_.push_back(std::vector<float>());
+     yolo_anchors_[2].push_back(10.0);
+     yolo_anchors_[2].push_back(13.0);
+     yolo_anchors_[2].push_back(16.0);
+     yolo_anchors_[2].push_back(30.0);
+     yolo_anchors_[2].push_back(33.0);
+     yolo_anchors_[2].push_back(23.0);
 }
 
 void YoloObjectDetectorTrt::cameraCallback(const sensor_msgs::ImageConstPtr& msg)
@@ -262,20 +321,20 @@ bool YoloObjectDetectorTrt::isCheckingForObjects() const
       && !checkForObjectsActionServer_->isPreemptRequested());
 }
 
-/*
+
 bool YoloObjectDetectorTrt::publishDetectionImage(const cv::Mat& detectionImage)
 {
   if (detectionImagePublisher_.getNumSubscribers() < 1)
     return false;
   cv_bridge::CvImage cvImage;
-  cvImage.header = headerBuff_[buffRdInd_];
+  //cvImage.header = headerBuff_[buffRdInd_];
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher_.publish(*cvImage.toImageMsg());
   ROS_DEBUG("Detection image has been published.");
   return true;
 }
-*/
+
 
 // double YoloObjectDetectorTrt::getWallTime()
 // {
@@ -286,67 +345,11 @@ bool YoloObjectDetectorTrt::publishDetectionImage(const cv::Mat& detectionImage)
 //   return (double) time.tv_sec + (double) time.tv_usec * .000001;
 // }
 
-int YoloObjectDetectorTrt::sizeNetwork(network *net)
-{
-  int i;
-  int count = 0;
-  for(i = 0; i < net->n; ++i){
-    layer l = net->layers[i];
-    if(l.type == YOLO || l.type == REGION || l.type == DETECTION){
-      count += l.outputs;
-    }
-  }
-  return count;
-}
-
-void YoloObjectDetectorTrt::rememberNetwork(network *net)
-{
-  int i;
-  int count = 0;
-  for(i = 0; i < net->n; ++i){
-    layer l = net->layers[i];
-    if(l.type == YOLO || l.type == REGION || l.type == DETECTION){
-      memcpy(predictions_[demoIndex_] + count, net->layers[i].output, sizeof(float) * l.outputs);
-      count += l.outputs;
-    }
-  }
-}
-
-detection *YoloObjectDetectorTrt::avgPredictions(network *net, int *nboxes)
-{
-  int i, j;
-  int count = 0;
-  fill_cpu(demoTotal_, 0, avg_, 1);
-  for(j = 0; j < demoFrame_; ++j){
-    axpy_cpu(demoTotal_, 1./demoFrame_, predictions_[j], 1, avg_, 1);
-  }
-  for(i = 0; i < net->n; ++i){
-    layer l = net->layers[i];
-    if(l.type == YOLO || l.type == REGION || l.type == DETECTION){
-      memcpy(l.output, avg_ + count, sizeof(float) * l.outputs);
-      count += l.outputs;
-    }
-  }
-  detection *dets = get_network_boxes(net, buff_[0].w, buff_[0].h, demoThresh_, demoHier_, 0, 1, nboxes);
-  return dets;
-}
-
 void *YoloObjectDetectorTrt::detectInThread()
 {
   running_ = 1;
-  float nms = .4;
-
-  layer l = net_->layers[net_->n - 1];
-  float *X = buffLetter_[buffRdInd_].data;
-
-  rememberNetwork(net_);
-  detection *dets = 0;
-  int nboxes = 0;
-  dets = avgPredictions(net_, &nboxes);
-
-  if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms);
   
-  Mat im = camImageCopy_;
+  Mat im = image_to_mat(buffLetter_[buffRdInd_]);
   cv::rotate(im, im, cv::ROTATE_90_CLOCKWISE);
   preprocessImage(im, (float *) buffers_[0], input_dims_[0]);
         
@@ -364,16 +367,51 @@ void *YoloObjectDetectorTrt::detectInThread()
   postprocessResults(buffers_, output_dims_, batch_size_, yolo_masks_, yolo_anchors_,
   orig_size, yolo_threshold_, nms_threshold_, boxes, classes, scores);
   
-  int object_id = 0;
-  std::sort(scores.begin(), scores.end());
+  int nboxes = scores.size();
+  int count = 0;
   
   Mat image_orig = im.clone();
   Mat roi = im.clone();
   Rect bbox;
   
-  cv::Rect local_box;
-  local_box = boxes[scores[0].second];
-  rectangle(im, local_box, Scalar(0,255,255),2.0);
+  //Sort pair scores, extract bounding boxes and send them to ROS
+  if(nboxes>0)
+  {
+    int object_id = 0;
+    std::sort(scores.begin(), scores.end());
+    for(int i=0; i<nboxes; i++)
+    {
+      int idx = scores[i].second; //index of highest score
+      bbox = boxes[idx];
+
+      float xmin = bbox.x - bbox.width / 2.;
+      float xmax = bbox.x + bbox.width / 2.;
+      float ymin = bbox.y - bbox.height / 2.;
+      float ymax = bbox.y + bbox.height / 2.;
+
+      // Make sure the bounding box doesn't leave the image boundary and draw bounding box
+      rectifyBox(bbox);
+      rectangle(im, bbox, Scalar(0,255,0),2.0);
+
+      // iterate through possible boxes and collect the bounding boxes
+      float x_center = (xmin + xmax) / 2;
+      float y_center = (ymin + ymax) / 2;
+      float BoundingBox_width = xmax - xmin;
+      float BoundingBox_height = ymax - ymin;
+
+      // define bounding box
+      // BoundingBox must be 1% size of frame (3.2x2.4 pixels)
+      if (BoundingBox_width > 0.01 && BoundingBox_height > 0.01) {
+        roiBoxes_[count].x = x_center;
+        roiBoxes_[count].y = y_center;
+        roiBoxes_[count].w = BoundingBox_width;
+        roiBoxes_[count].h = BoundingBox_height;
+        roiBoxes_[count].Class = classes[idx];
+        roiBoxes_[count].prob = scores[idx].first;
+        count++;
+    }
+  }
+  }
 
   if (enableConsoleOutput_) {
     printf("\033[2J");
@@ -381,61 +419,17 @@ void *YoloObjectDetectorTrt::detectInThread()
     printf("\nFPS:%.1f\n",fps_);
     printf("Objects:\n\n");
   }
-  image display = buff_[buffRdInd_];
-  draw_detections(display, dets, nboxes, demoThresh_, demoNames_, demoAlphabet_, demoClasses_);
 
-  mat_ = image_to_mat(display);
+  mat_ = im;
 
-  // extract the bounding boxes and send them to ROS
-  int i, j;
-  int count = 0;
-  for (i = 0; i < nboxes; ++i) {
-    float xmin = dets[i].bbox.x - dets[i].bbox.w / 2.;
-    float xmax = dets[i].bbox.x + dets[i].bbox.w / 2.;
-    float ymin = dets[i].bbox.y - dets[i].bbox.h / 2.;
-    float ymax = dets[i].bbox.y + dets[i].bbox.h / 2.;
+   //create array to store found bounding boxes
+   //if no object detected, make sure that ROS knows that num = 0
+   if (count == 0) {
+     roiBoxes_[0].num = 0;
+   } else {
+     roiBoxes_[0].num = count;
+   }
 
-    if (xmin < 0)
-      xmin = 0;
-    if (ymin < 0)
-      ymin = 0;
-    if (xmax > 1)
-      xmax = 1;
-    if (ymax > 1)
-      ymax = 1;
-
-    // iterate through possible boxes and collect the bounding boxes
-    for (j = 0; j < demoClasses_; ++j) {
-      if (dets[i].prob[j]) {
-        float x_center = (xmin + xmax) / 2;
-        float y_center = (ymin + ymax) / 2;
-        float BoundingBox_width = xmax - xmin;
-        float BoundingBox_height = ymax - ymin;
-
-        // define bounding box
-        // BoundingBox must be 1% size of frame (3.2x2.4 pixels)
-        if (BoundingBox_width > 0.01 && BoundingBox_height > 0.01) {
-          roiBoxes_[count].x = x_center;
-          roiBoxes_[count].y = y_center;
-          roiBoxes_[count].w = BoundingBox_width;
-          roiBoxes_[count].h = BoundingBox_height;
-          roiBoxes_[count].Class = j;
-          roiBoxes_[count].prob = dets[i].prob[j];
-          count++;
-        }
-      }
-    }
-  }
-
-  // create array to store found bounding boxes
-  // if no object detected, make sure that ROS knows that num = 0
-  if (count == 0) {
-    roiBoxes_[0].num = 0;
-  } else {
-    roiBoxes_[0].num = count;
-  }
-
-  free_detections(dets, nboxes);
   demoIndex_ = (demoIndex_ + 1) % demoFrame_;
   running_ = 0;
   return 0;
@@ -449,7 +443,7 @@ void YoloObjectDetectorTrt::writeImageToBuffer() {
   headerBuff_[buffWrtInd_] = imageHeader_;
 
   // buffId_[buffRdInd_] = actionId_; // unsure about this
-  letterbox_image_into(buff_[buffWrtInd_], net_->w, net_->h, buffLetter_[buffWrtInd_]);
+  letterbox_image_into(buff_[buffWrtInd_], yolo_res, yolo_res, buffLetter_[buffWrtInd_]);
 
   // Increase the index or not.
   int buff_new_wrt_ind = (buffWrtInd_ + 1)%3;
@@ -470,7 +464,7 @@ void *YoloObjectDetectorTrt::fetchInThread()
     headerBuff_[buffRdInd_] = imageAndHeader.header;
     buffId_[buffRdInd_] = actionId_;
   }
-  letterbox_image_into(buff_[buffRdInd_], net_->w, net_->h, buffLetter_[buffRdInd_]);
+  letterbox_image_into(buff_[buffRdInd_], yolo_res, yolo_res, buffLetter_[buffRdInd_]);
   return 0;
 }
 
@@ -511,27 +505,6 @@ void *YoloObjectDetectorTrt::detectLoop(void *ptr)
   }
 }
 
-void YoloObjectDetectorTrt::setupNetwork(char *cfgfile, char *weightfile, char *datafile, float thresh,
-                                      char **names, int classes,
-                                      int delay, char *prefix, int avg_frames, float hier, int w, int h,
-                                      int frames, int fullscreen)
-{
-  demoPrefix_ = prefix;
-  demoDelay_ = delay;
-  demoFrame_ = avg_frames;
-  image **alphabet = load_alphabet_with_file(datafile);
-  demoNames_ = names;
-  demoAlphabet_ = alphabet;
-  demoClasses_ = classes;
-  demoThresh_ = thresh;
-  demoHier_ = hier;
-  fullScreen_ = fullscreen;
-  printf("YOLO V3\n");
-  net_ = load_network(cfgfile, weightfile, 0);
-  set_batch_network(net_, 1);
-}
-
-
 void YoloObjectDetectorTrt::yolo()
 {
   const auto wait_duration = std::chrono::milliseconds(2000);
@@ -549,7 +522,7 @@ void YoloObjectDetectorTrt::yolo()
   srand(2222222);
 
   int i;
-  demoTotal_ = sizeNetwork(net_);
+  //demoTotal_ = sizeNetwork(net_);
   predictions_ = (float **) calloc(demoFrame_, sizeof(float*));
   for (i = 0; i < demoFrame_; ++i){
       predictions_[i] = (float *) calloc(demoTotal_, sizeof(float));
@@ -569,9 +542,9 @@ void YoloObjectDetectorTrt::yolo()
   buff_[2] = copy_image(buff_[0]);
   headerBuff_[1] = headerBuff_[0];
   headerBuff_[2] = headerBuff_[0];
-  buffLetter_[0] = letterbox_image(buff_[0], net_->w, net_->h);
-  buffLetter_[1] = letterbox_image(buff_[0], net_->w, net_->h);
-  buffLetter_[2] = letterbox_image(buff_[0], net_->w, net_->h);
+  buffLetter_[0] = letterbox_image(buff_[0], yolo_res, yolo_res);
+  buffLetter_[1] = letterbox_image(buff_[0], yolo_res, yolo_res);
+  buffLetter_[2] = letterbox_image(buff_[0], yolo_res, yolo_res);
   mat_ = cv::Mat(cv::Size(buff_[0].w, buff_[0].h), CV_MAKETYPE(CV_8U, buff_[0].c));
 
   int count = 0;
@@ -645,6 +618,9 @@ void *YoloObjectDetectorTrt::publishInThread()
   // Publish image.
   if (!publishDetectionImage(mat_)) {
     ROS_DEBUG("Detection image has not been broadcasted.");
+  }
+  if(publishDetectionImage(mat_)){
+    ROS_INFO("detection image has been broadcasted");
   }
 
   // Publish bounding boxes and detection result.
@@ -737,7 +713,7 @@ void YoloObjectDetectorTrt::interpretOutput(xt::xarray<float> &cpu_reshape, xt::
 	   xt::xarray<int> grid = xt::concatenate(xtuple(col, row), 3);
 	   box_xy += grid;
 	   box_xy /= (grid_w, grid_h); 
-	   box_wh /= (608,608); //input resolution yolo
+	   box_wh /= (yolo_res,yolo_res); //input resolution yolo
 	   box_xy -= (box_wh / 2.);
 
 	   boxes = xt::concatenate(xtuple(box_xy, box_wh), 3);

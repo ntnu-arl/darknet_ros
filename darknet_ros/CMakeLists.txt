@@ -77,6 +77,7 @@ catkin_package(
   INCLUDE_DIRS
     include
     ${EIGEN3_INCLUDE_DIR}
+    ${nvinfer_INCLUDE_DIRS}
   LIBRARIES
     ${PROJECT_NAME}_lib
   CATKIN_DEPENDS
@@ -101,6 +102,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
   ${OpenCV_INCLUDE_DIRS}
+  ${nvinfer_INCLUDE_DIRS}
 )
 
 if (CUDA_FOUND)
@@ -162,10 +164,13 @@ if (CUDA_FOUND)
     cudart
     cublas
     curand
+    nvinfer
+    nvinfer_plugin
     ${Boost_LIBRARIES}
     ${OpenCV_LIBRARIES}
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
+    ${TENSORRT_LIBRARIES}
   )
 
   cuda_add_executable(${PROJECT_NAME}
@@ -221,8 +226,11 @@ else()
     m
     pthread
     stdc++
+    nvinfer
+    nvinfer_plugin
     ${Boost_LIBRARIES}
     ${OpenCV_LIBRARIES}
+    ${TENSORRT_LIBRARIES}
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
   )

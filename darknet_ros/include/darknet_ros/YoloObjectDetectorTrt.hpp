@@ -258,6 +258,52 @@ class YoloObjectDetectorTrt
 
   // Yolo running on thread.
   std::thread yoloThread_;
+  
+  /*!
+   * Instantiates a sigmoid function
+   */  
+  static double sigmoid_f(float val);
+  
+  /*!
+   * Instantiates an exponential function
+   */  
+  static double exponential_f(float val);
+  
+  /*!
+   * Not sure what this does 
+   */     
+  void reshapeOutput(xt::xarray<float>& cpu_reshape);
+  
+  /*!
+   * Makes sure the bounding boxes don’t go outside of the image boundary 
+   */  
+  void rectifyBox(cv::Rect& bbox);
+  
+  /*!
+   * Does some XTensor calculations on the output of the TensorRT inference
+   */  
+  void interpretOutput(xt::xarray<float> &cpu_reshape, xt::xarray<float> &anchors_tensor, xt::xarray<float> &boxes, xt::xarray<float> &box_class_scores, xt::xarray<int> &box_classes);
+  
+  /*!
+   * Loads TensorRT engine
+   */     
+  void loadEngine(const std::string& model_path, TRTUniquePtr<nvinfer1::ICudaEngine>& engine,
+                     TRTUniquePtr<nvinfer1::IExecutionContext>& context);
+                     
+  /*!
+   * Not sure what this does 
+   */                     
+  size_t getSizeByDim(const nvinfer1::Dims& dims);
+  
+  /*!
+   *  Preprocessing of the image for TensorRT inference. Uploads image to GPU
+   */                     
+  void preprocessImage(cv::Mat frame, float* gpu_input, const nvinfer1::Dims& dims);
+  
+  /*!
+   * Post precessing of the image after TensorRT inference.
+   */  
+  void postprocessResults(std::vector<void*> gpu_output, const std::vector<nvinfer1::Dims> &dims, int batch_size, std::vector<std::vector<int>> &yolo_masks, std::vector<std::vector<float>> &yolo_anchors, const cv::Size orig_dims, float threshold, float nms_threshold, std::vector<cv::Rect> &boxes_return, std::vector<int> &classes_return, std::vector<std::pair<float,int>> &scores_return);
 
   // Darknet.
   char **demoNames_;
@@ -311,12 +357,6 @@ class YoloObjectDetectorTrt
 
   // double getWallTime();
 
-  int sizeNetwork(network *net);
-
-  void rememberNetwork(network *net);
-
-  detection *avgPredictions(network *net, int *nboxes);
-
   void *detectInThread();
 
   void *fetchInThread();
@@ -326,11 +366,6 @@ class YoloObjectDetectorTrt
   void *displayLoop(void *ptr);
 
   void *detectLoop(void *ptr);
-
-  void setupNetwork(char *cfgfile, char *weightfile, char *datafile, float thresh,
-                    char **names, int classes,
-                    int delay, char *prefix, int avg_frames, float hier, int w, int h,
-                    int frames, int fullscreen);
 
   void yolo();
 
@@ -344,50 +379,36 @@ class YoloObjectDetectorTrt
 
   void writeImageToBuffer();
 
-};
-
-} /* namespace darknet_ros*/
-
-  static double sigmoid_f(float val);
-  
-  static double exponential_f(float val);
-     
-  void reshapeOutput(xt::xarray<float>& cpu_reshape);
-  
-  void rectifyBox(cv::Rect& bbox);
-  
-  void interpretOutput(xt::xarray<float> &cpu_reshape, xt::xarray<float> &anchors_tensor, xt::xarray<float> &boxes, xt::xarray<float> &box_class_scores, xt::xarray<int> &box_classes);
-     
-  void loadEngine(const std::string& model_path, TRTUniquePtr<nvinfer1::ICudaEngine>& engine,
-                     TRTUniquePtr<nvinfer1::IExecutionContext>& context);
-                     
-  size_t getSizeByDim(const nvinfer1::Dims& dims);
-                     
-  void preprocessImage(cv::Mat frame, float* gpu_input, const nvinfer1::Dims& dims);
-  
-  void postprocessResults(std::vector<void*> gpu_output, const std::vector<nvinfer1::Dims> &dims, int batch_size, std::vector<std::vector<int>> &yolo_masks, std::vector<std::vector<float>> &yolo_anchors, const cv::Size orig_dims, float threshold, float nms_threshold, std::vector<cv::Rect> &boxes_return, std::vector<int> &classes_return, std::vector<std::pair<float,int>> &scores_return);
 
   //TRT model stuff
   int batch_size_ = 1;
   TRTUniquePtr<nvinfer1::ICudaEngine> engine_{nullptr};
   TRTUniquePtr<nvinfer1::IExecutionContext> context_{nullptr};
   
-        // get sizes of input and output and allocate memory required for input data and for output data
-    std::vector<nvinfer1::Dims> input_dims_; // we expect only one input
-    std::vector<nvinfer1::Dims> output_dims_; // and one output
-    std::vector<void*> buffers_;
-    std::vector<std::vector<int>> yolo_masks_;
-    std::vector<std::vector<float>> yolo_anchors_;
-    cv::Size original_dims_;
-    double yolo_threshold_;
-    double nms_threshold_ = 0.2;
+  // get sizes of input and output and allocate memory required for input data and for output
+  data
+  std::vector<nvinfer1::Dims> input_dims_; // we expect only one input
+  std::vector<nvinfer1::Dims> output_dims_; // and one output
+  std::vector<void*> buffers_;
+  std::vector<std::vector<int>> yolo_masks_;
+  std::vector<std::vector<float>> yolo_anchors_;
+  cv::Size original_dims_;
+  float yolo_threshold_;
+  double nms_threshold_ = 0.2;
+  int yolo_res;
     
-        // general model stuff
-    std::vector<std::string> labels;
-    std::string weightsPath;
-    std::string configPath;
-    std::string labelsPath;
-    std::string modelPath;
+  // general model stuff
+  std::vector<std::string> labels;
+  std::string weightsPath;
+  std::string configPath;
+  std::string labelsPath;
+  std::string modelPath;
+};
+
+} /* namespace darknet_ros*/
+
+
+
   
   
   
